@@ -5,9 +5,9 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import io
 
-st.set_page_config(page_title="テキスト一括翻訳ツール", layout="wide")
+st.set_page_config(page_title="多言語GLデータ内容解釈支援", layout="wide")
 
-st.title("🧾 テキスト一括翻訳ツール（ChatGPT API対応）")
+st.title("🧾 多言語GLデータ内容解釈支援（ChatGPT API対応）")
 
 st.markdown("""
 このアプリでは、**ExcelファイルのA列（1列目）のテキスト**をChatGPT（GPT-4o）で一括翻訳します。  
