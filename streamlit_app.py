@@ -5,38 +5,50 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import io
 
-st.set_page_config(page_title="テキスト一括翻訳ツール", page_icon="🧾")
+st.set_page_config(page_title="テキスト一括翻訳ツール", layout="wide")
 
 st.title("🧾 テキスト一括翻訳ツール（ChatGPT API対応）")
 
+# 説明文は横幅を活かして表示
 st.markdown("""
-このアプリでは、**Excelファイルの1列目（A列）のテキスト**をChatGPT（GPT-4o）で一括翻訳します。  
-翻訳プロンプトの「前提」「追加指示」はブラウザ上で自由に編集可能です。  
-出力は元のデータ＋翻訳結果＋注釈付きのExcelファイルとなります。
-
-**使い方：**
-
-1. OpenAIのAPIキーを入力（取得：[https://platform.openai.com/account/api-keys](https://platform.openai.com/account/api-keys)）
-2. Excelファイルをアップロード（翻訳対象はA列）
-3. 「前提」「追加指示」を必要に応じて編集
-4. 「翻訳を開始」を押す
-5. 結果ファイルをダウンロード
+このアプリでは、**ExcelファイルのA列（1列目）のテキスト**をChatGPT（GPT-4o）で一括翻訳します。  
+翻訳プロンプトの「前提」「追加指示」は自由に編集可能です。出力は元データ＋翻訳＋注釈のExcelファイルです。
 """)
 
-# APIキー入力欄
-if "api_key" not in st.session_state:
-    st.session_state.api_key = ""
+# 横並びレイアウト：左 = 入力操作、右 = プロンプト設定
+left_col, right_col = st.columns([1, 2])
 
-st.session_state.api_key = st.text_input(
-    "🔑 OpenAI APIキーを入力",
-    type="password",
-    value=st.session_state.api_key,
-)
+# ----------------------------
+# 左カラム：APIキー、ファイル、翻訳ボタン
+# ----------------------------
+with left_col:
+    st.header("🔐 入力・操作")
 
-# 翻訳プロンプト設定
-default_context = "- 翻訳対象は製薬企業のGLデータです。\n- 費目名、案件名、摘要、サプライヤ名等がまとめて入っています"
+    if "api_key" not in st.session_state:
+        st.session_state.api_key = ""
 
-fixed_instruction = """- 厳密に内容を日本語に翻訳してください。内容を要約せず、漏らさないようにお願いします。
+    st.session_state.api_key = st.text_input(
+        "OpenAI APIキー",
+        type="password",
+        value=st.session_state.api_key,
+    )
+
+    uploaded_file = st.file_uploader("Excelファイル（A列を翻訳）", type=["xlsx"])
+
+    if not st.session_state.api_key:
+        st.warning("APIキーを入力してください。")
+    elif not uploaded_file:
+        st.warning("Excelファイルをアップロードしてください。")
+
+# ----------------------------
+# 右カラム：翻訳プロンプト設定
+# ----------------------------
+with right_col:
+    st.header("📝 プロンプト設定")
+
+    default_context = "- 翻訳対象は製薬企業のGLデータです。\n- 費目名、案件名、摘要、サプライヤ名等がまとめて入っています"
+
+    fixed_instruction = """- 厳密に内容を日本語に翻訳してください。内容を要約せず、漏らさないようにお願いします。
 - 専門用語・略語・ベンダ名の説明は注釈として加えてください。
 - 略語は正式名称を付記してください。
 - 出力の際は、後でエクセルに分割して貼り付けられるように、改行や順番を保ってください。
@@ -44,25 +56,14 @@ fixed_instruction = """- 厳密に内容を日本語に翻訳してください�
 - 注釈内容はできるだけ出力してください。
 - 外国語のまま出力されることがありますが、必ず日本語に翻訳してください。"""
 
-st.subheader("📄 翻訳プロンプトのカスタマイズ")
+    context = st.text_area("【前提】", value=default_context, height=150)
+    st.markdown("【指示（固定）】")
+    st.code(fixed_instruction, language="markdown")
+    extra_instruction = st.text_area("【追加指示（任意）】", value="", height=120)
 
-context = st.text_area("【前提】", value=default_context, height=120)
-
-st.markdown("【指示（固定）】")
-st.code(fixed_instruction, language="markdown")
-
-extra_instruction = st.text_area("【追加指示（任意）】", value="", height=100)
-
-# ファイルアップロード
-uploaded_file = st.file_uploader("📁 Excelファイルをアップロード（A列を翻訳対象とします）", type=["xlsx"])
-
-# 条件チェック
-if not st.session_state.api_key:
-    st.warning("🔑 OpenAI APIキーを入力してください。")
-elif not uploaded_file:
-    st.warning("📄 Excelファイルをアップロードしてください。")
-
-# API呼び出し関数
+# ----------------------------
+# API処理・実行
+# ----------------------------
 def call_openai_api(text, context, fixed_instruction, extra_instruction):
     prompt = f"""以下のテキストを翻訳してください：
 
@@ -79,7 +80,6 @@ def call_openai_api(text, context, fixed_instruction, extra_instruction):
 翻訳結果: <翻訳内容>
 注釈: <注釈>
 """
-
     try:
         response = openai.chat.completions.create(
             model="gpt-4o",
@@ -106,7 +106,9 @@ def call_openai_api(text, context, fixed_instruction, extra_instruction):
     except Exception as e:
         return "エラー", f"APIエラー: {e}"
 
-# 実行ロジック
+# ----------------------------
+# 実行トリガー（翻訳処理）
+# ----------------------------
 if st.session_state.api_key and uploaded_file:
     openai.api_key = st.session_state.api_key
 
@@ -119,7 +121,7 @@ if st.session_state.api_key and uploaded_file:
 
     st.success(f"{len(first_col)}件のテキストを翻訳します。")
 
-    if st.button("🚀 翻訳を開始"):
+    if left_col.button("🚀 翻訳を開始"):
         with st.spinner("ChatGPTによる翻訳中..."):
             results = {}
             progress_bar = st.progress(0)
