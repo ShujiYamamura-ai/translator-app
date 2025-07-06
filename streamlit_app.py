@@ -142,10 +142,12 @@ if st.session_state.api_key and uploaded_file:
             output.seek(0)
             filename = f"翻訳結果_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
 
-            st.success("✅ 翻訳完了！以下からダウンロードできます。")
-            st.download_button(
-                label="📥 翻訳済みExcelをダウンロード",
-                data=output,
-                file_name=filename,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            # 🎯 左カラムに目立つようにダウンロードボタンを表示
+            with left_col:
+                st.success("✅ 翻訳が完了しました。以下からダウンロードしてください。")
+                st.download_button(
+                    label="📥 翻訳済みExcelをダウンロード",
+                    data=output,
+                    file_name=filename,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
