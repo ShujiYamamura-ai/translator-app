@@ -9,18 +9,15 @@ st.set_page_config(page_title="テキスト一括翻訳ツール", layout="wide"
 
 st.title("🧾 テキスト一括翻訳ツール（ChatGPT API対応）")
 
-# 説明文は横幅を活かして表示
 st.markdown("""
 このアプリでは、**ExcelファイルのA列（1列目）のテキスト**をChatGPT（GPT-4o）で一括翻訳します。  
-翻訳プロンプトの「前提」「追加指示」は自由に編集可能です。出力は元データ＋翻訳＋注釈のExcelファイルです。
+翻訳プロンプトの「前提」「翻訳指示」は自由に編集可能です。  
+出力は元データ＋翻訳結果＋注釈のExcelファイルとなります。
 """)
 
-# 横並びレイアウト：左 = 入力操作、右 = プロンプト設定
+# レイアウト：左 = 操作、右 = プロンプト
 left_col, right_col = st.columns([1, 2])
 
-# ----------------------------
-# 左カラム：APIキー、ファイル、翻訳ボタン
-# ----------------------------
 with left_col:
     st.header("🔐 入力・操作")
 
@@ -40,45 +37,44 @@ with left_col:
     elif not uploaded_file:
         st.warning("Excelファイルをアップロードしてください。")
 
-# ----------------------------
-# 右カラム：翻訳プロンプト設定
-# ----------------------------
 with right_col:
-    st.header("📝 プロンプト設定")
+    st.header("📝 翻訳プロンプトの設定")
 
-    default_context = "- 翻訳対象は製薬企業のGLデータです。\n- 費目名、案件名、摘要、サプライヤ名等がまとめて入っています"
+    default_context = """本データは、製薬業界における会計・経理関連のGL（総勘定元帳）データである。
+各テキストには、費目名・プロジェクト名・業務摘要・請求項目・ベンダ（外部委託業者）名など、複数の情報が混在しており、文脈依存の要素が多い。
+形式としては1つのセル内に複数情報が非構造的に記載されており、略語・記号・社内表記が含まれる可能性がある。"""
 
-    fixed_instruction = """- 厳密に内容を日本語に翻訳してください。内容を要約せず、漏らさないようにお願いします。
-- 専門用語・略語・ベンダ名の説明は注釈として加えてください。
-- 略語は正式名称を付記してください。
-- 出力の際は、後でエクセルに分割して貼り付けられるように、改行や順番を保ってください。
-- 翻訳内容は必ず出力してください。
-- 注釈内容はできるだけ出力してください。
-- 外国語のまま出力されることがありますが、必ず日本語に翻訳してください。"""
+    default_instruction = """- 原文の意味・意図を正確に汲み取り、日本語に逐語的に翻訳すること。省略・要約・意訳は一切行わない。
+- 原文内の文法ミスや略記がある場合も、意味を正確に汲み取って正しい日本語に置き換えること。
+- 専門用語、略語、製品名、ベンダ名（企業名）については、訳語に加えて注釈を付記すること。
+    - 例：GSK → GSK（グラクソ・スミスクライン、英国の製薬会社）
+    - 例：IQVIA → IQVIA（医療データ解析およびCRO事業を展開するグローバル企業）
+- 英語以外（例：ドイツ語、フランス語など）の語句が含まれる場合、すべての単語について注釈を付与すること。単語単位で区切って解釈する。
+- 略語は正式名称とセットで訳出すること（例：SAP → SAP（Systems, Applications and Products））。
+- 数字や日付、単位などは原文のフォーマットを維持した上で、意味を正確に反映した訳語を記述する。
+- 出力形式は「翻訳結果」「注釈」に明確に分けること。読みやすいように各セクションは改行で区切ること。
+- 翻訳内容はExcelで後から貼り付け・加工できるよう、文の順序や改行は維持し、余計な記号や括弧は追加しない。
+- 外国語・記号・略称が混在する場合でも、すべて日本語に翻訳・説明を付けること。未翻訳は不可。"""
 
     context = st.text_area("【前提】", value=default_context, height=150)
-    st.markdown("【指示（固定）】")
-    st.code(fixed_instruction, language="markdown")
-    extra_instruction = st.text_area("【追加指示（任意）】", value="", height=120)
+    instruction = st.text_area("【翻訳指示】", value=default_instruction, height=300)
 
-# ----------------------------
-# API処理・実行
-# ----------------------------
-def call_openai_api(text, context, fixed_instruction, extra_instruction):
+# 翻訳API呼び出し
+def call_openai_api(text, context, instruction):
     prompt = f"""以下のテキストを翻訳してください：
 
-原文: {text}
+原文:
+{text}
 
-前提:
+【前提】
 {context}
 
-指示:
-{fixed_instruction}
-{extra_instruction}
+【指示】
+{instruction}
 
-出力形式:
-翻訳結果: <翻訳内容>
-注釈: <注釈>
+【出力形式】
+翻訳結果: <翻訳された日本語テキスト>
+注釈: <訳語の補足・用語の背景など>
 """
     try:
         response = openai.chat.completions.create(
@@ -106,12 +102,9 @@ def call_openai_api(text, context, fixed_instruction, extra_instruction):
     except Exception as e:
         return "エラー", f"APIエラー: {e}"
 
-# ----------------------------
-# 実行トリガー（翻訳処理）
-# ----------------------------
+# 実行トリガー
 if st.session_state.api_key and uploaded_file:
     openai.api_key = st.session_state.api_key
-
     try:
         df = pd.read_excel(uploaded_file)
         first_col = df.iloc[:, 0].astype(str)
@@ -134,7 +127,7 @@ if st.session_state.api_key and uploaded_file:
 
             with ThreadPoolExecutor(max_workers=10) as executor:
                 futures = {
-                    executor.submit(call_openai_api, text, context, fixed_instruction, extra_instruction): idx
+                    executor.submit(call_openai_api, text, context, instruction): idx
                     for idx, text in enumerate(first_col)
                 }
                 for i, future in enumerate(as_completed(futures)):
