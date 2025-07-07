@@ -54,9 +54,17 @@ with right_col:
     context = st.text_area("【前提】", value=default_context, height=150)
     instruction = st.text_area("【翻訳指示】", value=default_instruction, height=300)
 
-# === 翻訳関数（Tool Calling未使用版）===
+# === 翻訳関数）===
 def call_openai_api(text, context, instruction):
-    prompt = f"""以下のテキストを翻訳してください：
+    system_prompt = (
+        "あなたは多言語のGL（総勘定元帳）テキストを翻訳し、企業・サービス・商品情報に基づいて補足注釈を付ける翻訳アシスタントです。"
+        "不明な企業名やサービス名が含まれる場合は、Web検索を用いて関連性の高い企業やサービス情報を収集し、注釈の中で補足してください。"
+        "検索対象とすべきキーワードを文中から自動的に抽出して構いません。"
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"""以下のテキストを翻訳し、内容に関連する企業やサービスが不明な場合はWeb検索で補足してください。
 
 原文:
 {text}
@@ -69,20 +77,23 @@ def call_openai_api(text, context, instruction):
 
 【出力形式】
 翻訳結果: <翻訳された日本語テキスト>
-注釈: <訳語の補足・用語の背景など>
-"""
+注釈: <訳語の補足・用語の背景、Webからの補足情報があれば「🔍 Web補足情報：...」として追記>
+"""}
+    ]
+
     try:
         response = openai.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "あなたは多言語のGLデータ翻訳アシスタントです。"},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0
+            messages=messages,
+            tools=[{"type": "web-search"}],
+            tool_choice="auto",
+            temperature=0.3
         )
-        content = response.choices[0].message.content
+
+        content = response.choices[0].message.content or ""
         translation, note = "翻訳失敗", "取得できませんでした"
         lines = content.splitlines()
+
         for line in lines:
             if "翻訳結果:" in line:
                 translation = line.split("翻訳結果:")[1].strip()
@@ -93,7 +104,9 @@ def call_openai_api(text, context, instruction):
                         note += f" {next_line.strip()}"
                     else:
                         break
+
         return translation, note
+
     except Exception as e:
         return "エラー", f"APIエラー: {e}"
 
