@@ -39,50 +39,52 @@ with left_col:
 
 # === プロンプト設定（右カラム）===
 with right_col:
-    st.header("📝 翻訳プロンプトの設定")
+    st.header("📝 翻訳プロンプト（固定形式）")
 
-    default_context = """本データは、製薬業界における会計・経理関連のGL（総勘定元帳）データである。
-各テキストには、費目名・プロジェクト名・業務摘要・請求項目・ベンダ（外部委託業者）名など、複数の情報が混在しており、文脈依存の要素が多い。
-形式としては1つのセル内に複数情報が非構造的に記載されており、略語・記号・社内表記が含まれる可能性がある。"""
+    st.markdown("""
+翻訳は以下の厳密な前提とルールに従って実行されます。  
+内容の変更が必要な場合は「上級者モード」をONにしてください。
+""")
 
-    default_instruction = """- 原文の意味・意図を正確に汲み取り、日本語に逐語的に翻訳すること。省略・要約・意訳は一切行わない。
-- 不明な企業名やサービス名が含まれる場合、Web検索を行って補足情報を注釈に記載すること。
-- 専門用語、略語、製品名、ベンダ名（企業名）については、訳語に加えて注釈を付記すること。
-- ベンダは費目約二名、案件名等の情報も参考にどんな会社か分かりやすく教えてください。
-- 数字や日付、単位などは原文のフォーマットを維持しつつ、意味が伝わるように記述すること。
-- 出力形式は「翻訳結果」「注釈」に分けて記載し、必要に応じて🔍Web補足情報も追加すること。"""
+    use_custom_prompt = st.checkbox("🔧 上級者モード（翻訳ルールを自分で書く）", value=False)
 
-    context = st.text_area("【前提】", value=default_context, height=150)
-    instruction = st.text_area("【翻訳指示】", value=default_instruction, height=300)
+    if use_custom_prompt:
+        custom_prompt = st.text_area("プロンプト全文を編集", height=400)
+    else:
+        custom_prompt = """あなたは製薬業界の財務データに精通したプロフェッショナル翻訳者である。
 
-# === 翻訳関数（Tool Calling未使用版）===
-def call_openai_api(text, context, instruction):
-    prompt = f"""以下のテキストを翻訳してください：
+以下の原文は、製薬企業の経理GLデータに含まれる情報であり、費目名・プロジェクト名・業務概要・ベンダ名（サプライヤ）・略語・記号などが混在した、文脈依存かつ非構造なテキストである。
 
-原文:
-{text}
+【翻訳対象】
+<原文テキストをここに挿入>
 
-【前提】
-{context}
-
-【指示】
-{instruction}
+【翻訳ルール】
+- 全ての情報を逐語的に翻訳し、省略・要約・意訳は禁止する
+- ベンダ（会社名）はどのような会社か調査して注釈に記載する
+- 略語・記号・記述の意味は正式名称と背景を注釈に加える（例："P1" = 第1相試験）
+- セミコロンやカンマなどの区切りは保持し、元の構造を再現する
+- 数字・日付・通貨表記も元の形式で残しつつ意味が分かるように訳す
 
 【出力形式】
-翻訳結果: <翻訳された日本語テキスト>
-注釈: <訳語の補足・用語の背景など>
+翻訳結果: <翻訳内容>
+注釈: <用語の補足／ベンダ説明／略語解説などを詳細に記載>
 """
+
+# 翻訳関数（改修後）
+def call_openai_api(text, prompt_template):
+    filled_prompt = prompt_template.replace("<原文テキストをここに挿入>", text)
+
     try:
         response = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "あなたは多言語のGLデータ翻訳アシスタントです。"},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": "あなたはプロフェッショナルな逐語翻訳者です。"},
+                {"role": "user", "content": filled_prompt}
             ],
             temperature=0
         )
         content = response.choices[0].message.content
-        translation, note = "翻訳失敗", "取得できませんでした"
+        translation, note = "翻訳失敗", "注釈取得不可"
         lines = content.splitlines()
         for line in lines:
             if "翻訳結果:" in line:
@@ -97,6 +99,7 @@ def call_openai_api(text, context, instruction):
         return translation, note
     except Exception as e:
         return "エラー", f"APIエラー: {e}"
+
 
 # === サンプル分析（左カラム）===
 with left_col:
