@@ -60,8 +60,31 @@ with right_col:
     context = st.text_area("【前提（文脈情報）】", value=default_context, height=150)
     instruction = st.text_area("【翻訳ルール／指示】", value=default_instruction, height=280)
 
-# === 翻訳関数（Tool Calling未使用版）===
-def call_openai_api(text, context, instruction):
+def search_web(query):
+    """Web検索を使って補足情報を取得する関数"""
+    try:
+        response = openai.chat.completions.create(
+            model="gpt-4o-search-preview",
+            web_search_options={
+                "search_context_size": "medium",
+                "user_location": {
+                    "type": "approximate",
+                    "approximate": {"country": "JP"},
+                },
+            },
+            messages=[{"role": "user", "content": query}],
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Web検索エラー: {e}"
+
+def call_openai_api(text, context, instruction, supplier_name=None):
+    # Web検索実行（企業名があれば）
+    supplier_info = ""
+    if supplier_name:
+        supplier_info = search_web(f"{supplier_name} 企業概要")
+
+    # プロンプト組み立て
     prompt = f"""あなたは製薬業界のGLデータに関するプロフェッショナル翻訳者である。
 
 以下の原文は、製薬企業の会計・経理データ（GLデータ）の一部であり、費目名・プロジェクト名・業務内容・サプライヤ名などが混在した非構造テキストである。
@@ -74,6 +97,8 @@ def call_openai_api(text, context, instruction):
 
 【翻訳指示】
 {instruction}
+
+{"【Web補足情報（企業名）】\n" + supplier_info if supplier_info else ""}
 
 【出力形式】
 翻訳結果: <逐語訳された日本語テキスト>
@@ -105,6 +130,7 @@ def call_openai_api(text, context, instruction):
         return translation, note
     except Exception as e:
         return "エラー", f"APIエラー: {e}"
+
 
 # === サンプル分析（左カラム）===
 with left_col:
@@ -146,10 +172,16 @@ if st.session_state.api_key and uploaded_file:
                 status_text.text(f"{i + 1}/{len(first_col)} 件処理中...")
 
             with ThreadPoolExecutor(max_workers=10) as executor:
-                futures = {
-                    executor.submit(call_openai_api, text, context, instruction): idx
-                    for idx, text in enumerate(first_col)
-                }
+                futures = {}
+                for idx, row in df.iterrows():
+                    try:
+                        # 国名, サプライヤ名, 費目, 案件名, 摘要 の列をすべて結合して翻訳対象とする
+                        full_text = " / ".join([str(row[col]) for col in df.columns])
+                        supplier_name = str(row["サプライヤ名"]) if "サプライヤ名" in df.columns else None
+                        futures[executor.submit(call_openai_api, full_text, context, instruction, supplier_name)] = idx
+                    except Exception as e:
+                        futures[executor.submit(lambda: ("エラー", f"データ処理エラー: {e}"))] = idx
+
                 for i, future in enumerate(as_completed(futures)):
                     idx = futures[future]
                     results[idx] = future.result()
