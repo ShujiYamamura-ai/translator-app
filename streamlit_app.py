@@ -5,19 +5,24 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import io
 
-st.set_page_config(page_title="多言語GLデータ内容解釈支援", layout="wide")
+# === 設定 ===
+st.set_page_config(page_title="多言語GLデータ内容解釈支援 - Web ver", layout="wide")
+st.title("🌐 多言語GLデータ内容解釈支援（Web ver）")
 
-st.title("🧾 多言語GLデータ内容解釈支援（Webver）")
+# === モード判定 ===
+is_web = True  # Web ver → 100件制限／ローカル版は False にすれば無制限
 
+# === 説明 ===
 st.markdown("""
-このアプリでは、**ExcelファイルのA列（1列目）のテキスト**をChatGPT（GPT-4o）で一括翻訳します。  
-翻訳プロンプトの「前提」「翻訳指示」は自由に編集可能です。  
-出力は元データ＋翻訳結果＋注釈のExcelファイルとなります。
+**このアプリは Web バージョンです（Streamlit Cloud 上で動作）**  
+- 処理できる件数は **最大100件まで** に制限されています  
+- より大量データ（100件以上）を扱いたい場合は、**ローカルアプリ版をご利用ください（処理件数制限なし）**
 """)
 
-# レイアウト：左 = 操作、右 = プロンプト
+# === レイアウト ===
 left_col, right_col = st.columns([1, 2])
 
+# === 入力エリア（左カラム）===
 with left_col:
     st.header("🔐 入力・操作")
 
@@ -32,11 +37,7 @@ with left_col:
 
     uploaded_file = st.file_uploader("Excelファイル（A列を翻訳）", type=["xlsx"])
 
-    if not st.session_state.api_key:
-        st.warning("APIキーを入力してください。")
-    elif not uploaded_file:
-        st.warning("Excelファイルをアップロードしてください。")
-
+# === プロンプト設定（右カラム）===
 with right_col:
     st.header("📝 翻訳プロンプトの設定")
 
@@ -45,33 +46,17 @@ with right_col:
 形式としては1つのセル内に複数情報が非構造的に記載されており、略語・記号・社内表記が含まれる可能性がある。"""
 
     default_instruction = """- 原文の意味・意図を正確に汲み取り、日本語に逐語的に翻訳すること。省略・要約・意訳は一切行わない。
-- 原文内の文法ミスや略記がある場合も、意味を正確に汲み取って正しい日本語に置き換えること。
+- 不明な企業名やサービス名が含まれる場合、Web検索を行って補足情報を注釈に記載すること。
 - 専門用語、略語、製品名、ベンダ名（企業名）については、訳語に加えて注釈を付記すること。
-    - 例：GSK → GSK（グラクソ・スミスクライン、英国の製薬会社）
-    - 例：IQVIA → IQVIA（医療データ解析およびCRO事業を展開するグローバル企業）
-- 英語以外（例：ドイツ語、フランス語など）の語句が含まれる場合、すべての単語について注釈を付与すること。単語単位で区切って解釈する。
-- 略語は正式名称とセットで訳出すること（例：SAP → SAP（Systems, Applications and Products））。
-- 数字や日付、単位などは原文のフォーマットを維持した上で、意味を正確に反映した訳語を記述する。
-- 出力形式は「翻訳結果」「注釈」に明確に分けること。読みやすいように各セクションは改行で区切ること。
-- 翻訳内容はExcelで後から貼り付け・加工できるよう、文の順序や改行は維持し、余計な記号や括弧は追加しない。
-- 外国語・記号・略称が混在する場合でも、すべて日本語に翻訳・説明を付けること。未翻訳は不可。"""
+- 数字や日付、単位などは原文のフォーマットを維持しつつ、意味が伝わるように記述すること。
+- 出力形式は「翻訳結果」「注釈」に分けて記載し、必要に応じて🔍Web補足情報も追加すること。"""
 
     context = st.text_area("【前提】", value=default_context, height=150)
     instruction = st.text_area("【翻訳指示】", value=default_instruction, height=300)
 
-import openai
-
+# === 翻訳関数（Tool Calling未使用版）===
 def call_openai_api(text, context, instruction):
-    system_prompt = (
-        "あなたは多言語のGL（総勘定元帳）テキストを翻訳し、企業・サービス・商品情報に基づいて補足注釈を付ける翻訳アシスタントです。"
-        "私は戦略コンサルタントでGLデータを基にコスト削減をしようとしています"
-        "不明な企業名やサービス名が含まれる場合は、Web検索を用いて関連性の高い企業やサービス情報を収集し、注釈の中で補足してください。"
-        "検索対象とすべきキーワードを文中から自動的に抽出して構いません。"
-    )
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"""以下のテキストを翻訳し、内容に関連する企業やサービスが不明な場合はWeb検索で補足してください。
+    prompt = f"""以下のテキストを翻訳してください：
 
 原文:
 {text}
@@ -84,31 +69,20 @@ def call_openai_api(text, context, instruction):
 
 【出力形式】
 翻訳結果: <翻訳された日本語テキスト>
-注釈: <訳語の補足・用語の背景、Webからの補足情報があれば「🔍 Web補足情報：...」として追記>
-"""}
-    ]
-
+注釈: <訳語の補足・用語の背景など>
+"""
     try:
         response = openai.chat.completions.create(
             model="gpt-4o",
-            messages=messages,
-            tools=[
-                {
-                    "type": "tool",
-                    "function": {
-                        "name": "web-search",
-                        "description": "企業名やサービス情報を検索するためのWeb検索ツール"
-                    }
-                }
+            messages=[
+                {"role": "system", "content": "あなたは多言語のGLデータ翻訳アシスタントです。"},
+                {"role": "user", "content": prompt}
             ],
-            tool_choice="auto",
-            temperature=0.3
+            temperature=0
         )
-
-        content = response.choices[0].message.content or ""
+        content = response.choices[0].message.content
         translation, note = "翻訳失敗", "取得できませんでした"
         lines = content.splitlines()
-
         for line in lines:
             if "翻訳結果:" in line:
                 translation = line.split("翻訳結果:")[1].strip()
@@ -119,14 +93,22 @@ def call_openai_api(text, context, instruction):
                         note += f" {next_line.strip()}"
                     else:
                         break
-
         return translation, note
-
     except Exception as e:
         return "エラー", f"APIエラー: {e}"
 
+# === サンプル分析（左カラム）===
+with left_col:
+    st.subheader("🔍 サンプル実行（1件だけ試す）")
+    sample_text = st.text_input("例：翻訳対象文をここに入力", value="SAP invoice for oncology P1 study; GSK")
+    if st.button("サンプル翻訳を実行"):
+        with st.spinner("翻訳中..."):
+            sample_result, sample_note = call_openai_api(sample_text, context, instruction)
+            st.success("✅ 翻訳完了")
+            st.markdown(f"**翻訳結果：** {sample_result}")
+            st.markdown(f"**注釈：** {sample_note}")
 
-# 実行トリガー
+# === メイン処理（アップロードファイルがあれば）===
 if st.session_state.api_key and uploaded_file:
     openai.api_key = st.session_state.api_key
     try:
@@ -137,6 +119,11 @@ if st.session_state.api_key and uploaded_file:
         st.stop()
 
     st.success(f"{len(first_col)}件のテキストを翻訳します。")
+
+    # Web版では件数制限
+    if is_web and len(first_col) > 100:
+        st.error("⚠️ このWebバージョンでは最大100件までしか処理できません。\nファイルを調整するか、ローカルアプリ版をご利用ください。")
+        st.stop()
 
     if left_col.button("🚀 翻訳を開始"):
         with st.spinner("ChatGPTによる翻訳中..."):
@@ -166,7 +153,6 @@ if st.session_state.api_key and uploaded_file:
             output.seek(0)
             filename = f"翻訳結果_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
 
-            # 🎯 左カラムに目立つようにダウンロードボタンを表示
             with left_col:
                 st.success("✅ 翻訳が完了しました。以下からダウンロードしてください。")
                 st.download_button(
