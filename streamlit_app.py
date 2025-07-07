@@ -7,7 +7,7 @@ import io
 
 st.set_page_config(page_title="多言語GLデータ内容解釈支援", layout="wide")
 
-st.title("🧾 多言語GLデータ内容解釈支援（ChatGPT API対応）")
+st.title("🧾 多言語GLデータ内容解釈支援（Webver）")
 
 st.markdown("""
 このアプリでは、**ExcelファイルのA列（1列目）のテキスト**をChatGPT（GPT-4o）で一括翻訳します。  
@@ -59,9 +59,19 @@ with right_col:
     context = st.text_area("【前提】", value=default_context, height=150)
     instruction = st.text_area("【翻訳指示】", value=default_instruction, height=300)
 
-# 翻訳API呼び出し
+import openai
+
 def call_openai_api(text, context, instruction):
-    prompt = f"""以下のテキストを翻訳してください：
+    system_prompt = (
+        "あなたは多言語のGL（総勘定元帳）テキストを翻訳し、企業・サービス・商品情報に基づいて補足注釈を付ける翻訳アシスタントです。"
+        "私は戦略コンサルタントでGLデータを基にコスト削減をしようとしています"
+        "不明な企業名やサービス名が含まれる場合は、Web検索を用いて関連性の高い企業やサービス情報を収集し、注釈の中で補足してください。"
+        "検索対象とすべきキーワードを文中から自動的に抽出して構いません。"
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"""以下のテキストを翻訳し、内容に関連する企業やサービスが不明な場合はWeb検索で補足してください。
 
 原文:
 {text}
@@ -74,20 +84,31 @@ def call_openai_api(text, context, instruction):
 
 【出力形式】
 翻訳結果: <翻訳された日本語テキスト>
-注釈: <訳語の補足・用語の背景など>
-"""
+注釈: <訳語の補足・用語の背景、Webからの補足情報があれば「🔍 Web補足情報：...」として追記>
+"""}
+    ]
+
     try:
         response = openai.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "あなたは優秀な翻訳専門家です。"},
-                {"role": "user", "content": prompt}
+            messages=messages,
+            tools=[
+                {
+                    "type": "tool",
+                    "function": {
+                        "name": "web-search",
+                        "description": "企業名やサービス情報を検索するためのWeb検索ツール"
+                    }
+                }
             ],
-            temperature=0
+            tool_choice="auto",
+            temperature=0.3
         )
-        content = response.choices[0].message.content
+
+        content = response.choices[0].message.content or ""
         translation, note = "翻訳失敗", "取得できませんでした"
         lines = content.splitlines()
+
         for line in lines:
             if "翻訳結果:" in line:
                 translation = line.split("翻訳結果:")[1].strip()
@@ -98,9 +119,12 @@ def call_openai_api(text, context, instruction):
                         note += f" {next_line.strip()}"
                     else:
                         break
+
         return translation, note
+
     except Exception as e:
         return "エラー", f"APIエラー: {e}"
+
 
 # 実行トリガー
 if st.session_state.api_key and uploaded_file:
