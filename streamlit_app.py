@@ -20,7 +20,7 @@ def normalize_country_code(name):
 
 # === Streamlit UI ===
 st.set_page_config(page_title="GL翻訳支援", layout="wide")
-st.title("🌐 多言語GLデータ翻訳支援（Web版）")
+st.title("🌐 多言語GLデータ翻訳支援（Web版）｜2025-07-09 13:45 JST")
 
 left_col, right_col = st.columns([1, 2])
 
