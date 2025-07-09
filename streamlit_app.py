@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import io
+import time
 
 # === コード更新日時（固定表示用）===
 CODE_UPDATED_AT = "2025-07-09 23:40 JST"
@@ -93,26 +94,29 @@ def should_execute_web_search(note, mode):
     return False
 
 # === Web検索関数 ===
-def search_web(supplier, country_name, prompt_hint, target_company):
+def search_web(supplier, country_name, prompt_hint, target_company, retries=2, delay=2):
     iso_code = normalize_country_code(country_name)
     query = build_supplier_search_query(supplier, target_company, prompt_hint)
-    
-    try:
-        response = openai.chat.completions.create(
-            model="gpt-4o-search-preview",
-            web_search_options={
-                "search_context_size": "medium",
-                "user_location": {
-                    "type": "approximate",
-                    "approximate": {"country": iso_code},
-                },
-            },
-            messages=[{"role": "user", "content": query}],
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"Web検索エラー: {e}"
 
+    for attempt in range(retries + 1):
+        try:
+            response = openai.chat.completions.create(
+                model="gpt-4o-search-preview",
+                web_search_options={
+                    "search_context_size": "medium",
+                    "user_location": {
+                        "type": "approximate",
+                        "approximate": {"country": iso_code},
+                    },
+                },
+                messages=[{"role": "user", "content": query}],
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            if attempt < retries:
+                time.sleep(delay)
+            else:
+                return f"Web検索失敗（{retries+1}回試行後）: {e}"
  
  # === 検索クエリ生成関数 ===   
 def build_supplier_search_query(supplier_name, target_company, prompt_hint):
@@ -184,7 +188,7 @@ def call_openai_api(text, context, instruction, supplier_name, country_name, pro
 # === サンプル翻訳 ===
 with left_col:
     st.subheader("🔍 サンプル翻訳（入力例）")
-
+    sample_target_company = st.text_input("🎯 対象企業名（想定クライアント）", value="資生堂")
     sample_country = st.text_input("🌍 国名", value="US")
     sample_supplier = st.text_input("🏢 サプライヤ名", value="JWALK, LLC")
     sample_category = st.text_input("💼 費目名", value="Consulting Fee")
@@ -202,7 +206,7 @@ with left_col:
                 country_name=sample_country,
                 prompt_hint=supplier_prompt,
                 web_mode=web_search_mode,
-                target_company=target_company
+                target_company=sample_target_company  # ← 追加された引数
             )
             st.success("✅ 翻訳完了")
             st.markdown(f"**翻訳結果：** {tr}")
