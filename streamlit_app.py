@@ -12,11 +12,11 @@ JST = timezone(timedelta(hours=9))
 now_jst = datetime.now(JST).strftime('%Y-%m-%d %H:%M')
 
 # === ISO国コードファイルの読み込み ===
-@st.cache_data
 
 # 相対パスでcsv読み込み
 ISO_XLSX_PATH = os.path.join("data", "iso_country_codes.xlsx")
 
+@st.cache_data
 def load_country_iso_map(path):
     try:
         df = pd.read_excel(path)
