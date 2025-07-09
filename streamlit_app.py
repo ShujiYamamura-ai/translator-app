@@ -195,12 +195,42 @@ def call_openai_api(text, context, instruction, supplier_name, country_name, pro
 with left_col:
     st.subheader("🔍 サンプル翻訳（構造化入力）")
 
-    sample_country = st.text_input("🌍 国名：", value="US")
-    sample_supplier = st.text_input("🏢 サプライヤ名：", value="JWALK, LLC")
-    sample_category = st.text_input("💼 費目名：", value="Consulting Fee")
-    sample_project = st.text_input("📁 案件名：", value="US Market Trend Research")
-    sample_summary = st.text_input("📝 摘要：", value="Local Consumer Behavior Analysis in NY")
-    sample_target_company = st.text_input("🎯 対象企業名：", value="Shiseido")
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        st.markdown("🌍 **国名：**")
+    with col2:
+        sample_country = st.text_input(label="", value="US", key="sample_country")
+
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        st.markdown("🏢 **サプライヤ名：**")
+    with col2:
+        sample_supplier = st.text_input(label="", value="JWALK, LLC", key="sample_supplier")
+
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        st.markdown("💼 **費目名：**")
+    with col2:
+        sample_category = st.text_input(label="", value="Consulting Fee", key="sample_category")
+
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        st.markdown("📁 **案件名：**")
+    with col2:
+        sample_project = st.text_input(label="", value="US Market Trend Research", key="sample_project")
+
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        st.markdown("📝 **摘要：**")
+    with col2:
+        sample_summary = st.text_input(label="", value="Local Consumer Behavior Analysis in NY", key="sample_summary")
+
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        st.markdown("🎯 **対象企業名：**")
+    with col2:
+        sample_target_company = st.text_input(label="", value="Shiseido", key="sample_target_company")
+
 
     if st.button("サンプル翻訳を実行"):
         sample_text = f"{sample_country} / {sample_supplier} / {sample_category} / {sample_project} / {sample_summary}"
