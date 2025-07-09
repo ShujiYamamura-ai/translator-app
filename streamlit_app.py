@@ -5,17 +5,16 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import io
 
-# === UI設定 ===
-st.set_page_config(page_title="多言語GLデータ翻訳支援", layout="wide")
-st.title("🌐 多言語GLデータ内容解釈支援（Web版）")
+# === UI初期設定 ===
+st.set_page_config(page_title="GL翻訳支援アプリ", layout="wide")
+st.title("🌐 多言語GLデータ翻訳支援（Web版）")
 
-# === 処理制限 ===
-is_web = True  # 100件制限
+is_web = True  # Webバージョン制限：最大100件
 
-# === レイアウト ===
+# === レイアウト設定 ===
 left_col, right_col = st.columns([1, 2])
 
-# === 入力UI ===
+# === 入力エリア ===
 with left_col:
     st.header("🔐 入力")
 
@@ -23,31 +22,37 @@ with left_col:
         st.session_state.api_key = ""
 
     st.session_state.api_key = st.text_input("OpenAI APIキー", type="password", value=st.session_state.api_key)
-    uploaded_file = st.file_uploader("Excelファイル（5列構成）", type=["xlsx"])
+    uploaded_file = st.file_uploader("Excelファイル（国名, サプライヤ名, 費目, 案件名, 摘要）", type=["xlsx"])
 
-# === 翻訳プロンプト設定 ===
+# === 翻訳設定エリア ===
 with right_col:
     st.header("📝 翻訳プロンプトの設定")
+
+    search_enabled = st.checkbox("🔎 不明なサプライヤに対してWeb検索を有効にする", value=True)
 
     default_context = """本データは製薬業界のGL（総勘定元帳）データであり、1行ごとに「国名」「サプライヤ名」「費目」「案件名」「摘要」から構成される構造化データである。
 各項目には略語、業界用語、ベンダ名、費目コード、内部プロジェクト名などが含まれている。"""
 
-    default_instruction = """- 原文の意味・意図を正確に逐語訳すること（省略・要約・意訳はNG）。
-- 不明な企業名や略語はWeb検索を行い、注釈に企業説明を加えること。
-- 数字・単位は原文を保持するが意味が伝わるよう記述。
-- 「翻訳結果」と「注釈」の2段構成で出力すること。"""
+    default_instruction = """- 原文の意味・意図を正確に逐語訳すること（省略・要約・意訳は不可）。
+- 不明な企業名や略語は必要な場合のみWeb検索で補足し、注釈に説明を加えること。
+- 出力は「翻訳結果」「注釈」の2段構成で記載。
+- 数字・単位は原文を保持しつつ意味が伝わるように記述する。"""
 
     context = st.text_area("【前提】", value=default_context, height=150)
     instruction = st.text_area("【翻訳ルール】", value=default_instruction, height=250)
 
 # === Web検索関数 ===
-def search_web(query):
+def search_web(supplier, country):
+    query = f"{supplier} とは？  国:{country}"
     try:
         response = openai.chat.completions.create(
             model="gpt-4o-search-preview",
             web_search_options={
                 "search_context_size": "medium",
-                "user_location": {"type": "approximate", "approximate": {"country": "JP"}},
+                "user_location": {
+                    "type": "approximate",
+                    "approximate": {"country": country if len(country) == 2 else "JP"},
+                },
             },
             messages=[{"role": "user", "content": query}],
         )
@@ -56,14 +61,10 @@ def search_web(query):
         return f"Web検索エラー: {e}"
 
 # === 翻訳関数 ===
-def call_openai_api(text, context, instruction, supplier_query=None):
-    supplier_info = ""
-    if supplier_query:
-        supplier_info = search_web(supplier_query)
+def call_openai_api(text, context, instruction, supplier_name, country, search_enabled=True):
+    prompt = f"""あなたは製薬業界のGLデータに関するプロ翻訳者です。
 
-    prompt = f"""あなたは製薬業界のGLデータに関するプロフェッショナル翻訳者である。
-
-以下の原文は、「国名」「サプライヤ名」「費目」「案件名」「摘要」から構成される構造化データの1行である。
+この原文は「国名」「サプライヤ名」「費目」「案件名」「摘要」で構成されるGLデータの1行である。
 
 【原文】
 {text}
@@ -73,8 +74,6 @@ def call_openai_api(text, context, instruction, supplier_query=None):
 
 【翻訳指示】
 {instruction}
-
-{"【Web補足情報（企業名）】\n" + supplier_info if supplier_info else ""}
 
 【出力形式】
 翻訳結果: <逐語訳された日本語テキスト>
@@ -91,7 +90,8 @@ def call_openai_api(text, context, instruction, supplier_query=None):
             temperature=0
         )
         content = response.choices[0].message.content
-        translation, note = "翻訳失敗", "注釈取得失敗"
+        translation, note, supplier_info = "翻訳失敗", "注釈取得失敗", ""
+
         lines = content.splitlines()
         for line in lines:
             if "翻訳結果:" in line:
@@ -103,25 +103,31 @@ def call_openai_api(text, context, instruction, supplier_query=None):
                         note += f" {next_line.strip()}"
                     else:
                         break
+
+        if search_enabled and (
+            "不明" in note or "情報が見つかりません" in note or "補足情報なし" in note
+        ):
+            supplier_info = search_web(supplier_name, country)
         return translation, note, supplier_info
     except Exception as e:
         return "エラー", f"APIエラー: {e}", ""
 
-# === サンプル翻訳 ===
+# === サンプル実行 ===
 with left_col:
-    st.subheader("🔍 サンプル実行")
-    sample_input = st.text_input("例：Japan / GSK / Oncology Study / P1 Trial / SAP invoice")
+    st.subheader("🔍 サンプル翻訳")
+    sample_input = st.text_input("例：日本 / GSK / 臨床試験費 / 肺がんP1 / SAP請求")
     if st.button("サンプル翻訳を実行"):
         with st.spinner("翻訳中..."):
             tr, note, sup = call_openai_api(
-                sample_input, context, instruction, supplier_query="GSK 製薬会社 概要"
+                sample_input, context, instruction,
+                supplier_name="GSK", country="JP", search_enabled=search_enabled
             )
-            st.success("✅ 翻訳完了")
+            st.success("✅ 完了")
             st.markdown(f"**翻訳結果：** {tr}")
             st.markdown(f"**注釈：** {note}")
             st.markdown(f"**サプライヤ情報：** {sup}")
 
-# === メイン翻訳処理 ===
+# === メイン処理 ===
 if st.session_state.api_key and uploaded_file:
     openai.api_key = st.session_state.api_key
 
@@ -142,7 +148,7 @@ if st.session_state.api_key and uploaded_file:
         st.stop()
 
     if left_col.button("🚀 一括翻訳実行"):
-        with st.spinner("処理中..."):
+        with st.spinner("ChatGPTによる翻訳中..."):
             results = {}
             progress_bar = st.progress(0)
             status_text = st.empty()
@@ -157,8 +163,13 @@ if st.session_state.api_key and uploaded_file:
                 for idx, row in df.iterrows():
                     try:
                         full_text = f"{row['国名']} / {row['サプライヤ名']} / {row['費目']} / {row['案件名']} / {row['摘要']}"
-                        supplier_query = f"{row['サプライヤ名']} 会社情報  国:{row['国名']} 費目:{row['費目']}"
-                        futures[executor.submit(call_openai_api, full_text, context, instruction, supplier_query)] = idx
+                        futures[executor.submit(
+                            call_openai_api,
+                            full_text, context, instruction,
+                            supplier_name=row["サプライヤ名"],
+                            country=row["国名"],
+                            search_enabled=search_enabled
+                        )] = idx
                     except Exception as e:
                         futures[executor.submit(lambda: ("エラー", f"データ処理エラー: {e}", ""))] = idx
 
@@ -175,7 +186,7 @@ if st.session_state.api_key and uploaded_file:
             filename = f"翻訳結果_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
 
             with left_col:
-                st.success("✅ 処理完了。以下からExcelをダウンロード可能です。")
+                st.success("✅ 翻訳完了。以下からダウンロードしてください。")
                 st.download_button(
                     label="📥 翻訳済みExcelをダウンロード",
                     data=output,
