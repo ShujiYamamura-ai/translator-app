@@ -185,11 +185,11 @@ def call_openai_api(text, context, instruction, supplier_name, country_name, pro
 with left_col:
     st.subheader("🔍 サンプル翻訳（入力例）")
 
-    sample_country = st.text_input("🌍 国名", value="JP")
-    sample_supplier = st.text_input("🏢 サプライヤ名", value="Merck")
-    sample_category = st.text_input("💼 費目名", value="Clinical Trial")
-    sample_project = st.text_input("📁 案件名", value="Lung Cancer Study")
-    sample_summary = st.text_input("📝 摘要", value="SAP invoice")
+    sample_country = st.text_input("🌍 国名", value="US")
+    sample_supplier = st.text_input("🏢 サプライヤ名", value="JWALK, LLC")
+    sample_category = st.text_input("💼 費目名", value="Consulting Fee")
+    sample_project = st.text_input("📁 案件名", value="US Market Trend Research")
+    sample_summary = st.text_input("📝 摘要", value="Local Consumer Behavior Analysis in NY")
 
     if st.button("サンプル翻訳を実行"):
         sample_text = f"{sample_country} / {sample_supplier} / {sample_category} / {sample_project} / {sample_summary}"
