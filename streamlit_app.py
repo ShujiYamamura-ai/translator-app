@@ -39,6 +39,14 @@ def normalize_country_code(name):
 # === 入力エリア ===
 with left_col:
     st.header("🔐 入力ファイルとAPIキー")
+     # 注意喚起のメッセージ
+    st.markdown("""
+    ⚠️ **ご注意：Web版では、クライアントの実データ（機密情報）はアップロードしないでください。**  
+    Web版はインターネット経由で処理を行います。  
+    **ダミーデータや検証用データのみをご利用ください。**
+
+    👉 クライアントの実データを処理する場合は、**ローカルアプリ版（社内環境またはPC上）**をご利用いただくことを強く推奨します。
+    """)
     if "api_key" not in st.session_state:
         st.session_state.api_key = ""
     st.session_state.api_key = st.text_input("OpenAI APIキー", type="password", value=st.session_state.api_key)
