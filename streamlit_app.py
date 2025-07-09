@@ -183,16 +183,23 @@ def call_openai_api(text, context, instruction, supplier_name, country_name, pro
 
 # === サンプル翻訳 ===
 with left_col:
-    st.subheader("🔍 サンプル翻訳（英語入力例）")
-    sample_text = st.text_input("例：Japan / Merck / Clinical Trial / Lung Cancer Study / SAP invoice")
+    st.subheader("🔍 サンプル翻訳（入力例）")
+
+    sample_country = st.text_input("🌍 国名", value="JP")
+    sample_supplier = st.text_input("🏢 サプライヤ名", value="Merck")
+    sample_category = st.text_input("💼 費目名", value="Clinical Trial")
+    sample_project = st.text_input("📁 案件名", value="Lung Cancer Study")
+    sample_summary = st.text_input("📝 摘要", value="SAP invoice")
+
     if st.button("サンプル翻訳を実行"):
+        sample_text = f"{sample_country} / {sample_supplier} / {sample_category} / {sample_project} / {sample_summary}"
         with st.spinner("翻訳中..."):
             tr, note, info = call_openai_api(
                 sample_text,
                 context,
                 instruction,
-                supplier_name="Merck",
-                country_name="Japan",
+                supplier_name=sample_supplier,
+                country_name=sample_country,
                 prompt_hint=supplier_prompt,
                 web_mode=web_search_mode,
                 target_company=target_company
