@@ -1,26 +1,30 @@
 import streamlit as st
 import pandas as pd
 import openai
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import io
 
-# === ISO国コード最小変換辞書（日本語＋英語 最低限）
-COUNTRY_NAME_TO_ISO = {
-    "日本": "JP", "Japan": "JP",
-    "中国": "CN", "China": "CN",
-    "韓国": "KR", "Korea": "KR", "South Korea": "KR",
-    "アメリカ": "US", "USA": "US", "United States": "US"
-}
+# === JST時刻（更新日時表示用）===
+JST = timezone(timedelta(hours=9))
+now_jst = datetime.now(JST).strftime('%Y-%m-%d %H:%M')
+
+# === ISO国コードファイルの読み込み ===
+@st.cache_data
+def load_country_iso_map(path):
+    df = pd.read_csv(path)
+    return {str(k).strip(): str(v).strip() for k, v in zip(df["国名"], df["ISOコード"])}
+
+iso_map = load_country_iso_map("/mnt/data/iso_country_codes.csv")
 
 def normalize_country_code(name):
     if isinstance(name, str):
-        return COUNTRY_NAME_TO_ISO.get(name.strip(), "JP")
+        return iso_map.get(name.strip(), "JP")
     return "JP"
 
-# === Streamlit UI ===
+# === Streamlit UI設定 ===
 st.set_page_config(page_title="GL翻訳支援", layout="wide")
-st.title("🌐 多言語GLデータ翻訳支援（Web版）｜2025-07-09 13:45 JST")
+st.title(f"🌐 多言語GLデータ翻訳支援（Web版｜更新: 2025-07-09 14:00 JST）")
 
 left_col, right_col = st.columns([1, 2])
 
@@ -32,21 +36,24 @@ with left_col:
     uploaded_file = st.file_uploader("Excelファイル（国名、サプライヤ名、費目、案件名、摘要）", type=["xlsx"])
 
 with right_col:
-    st.header("📝 翻訳設定")
-    search_enabled = st.checkbox("🔎 不明な企業に対してWeb検索を行う", value=True)
+    st.header("📝 翻訳ルールとオプション")
+    search_enabled = st.checkbox("🔎 不明な企業のみWeb検索を実行", value=True)
 
-    default_context = """本データは製薬業界のGL（総勘定元帳）データであり、「国名」「サプライヤ名」「費目」「案件名」「摘要」から構成されている構造化データです。"""
-    default_instruction = """- 各項目の内容を正確に逐語訳してください。
-- 不明な企業名がある場合、必要に応じてWeb検索し補足情報を注釈に加えてください。
-- 出力形式は「翻訳結果」「注釈」に分け、すべて日本語で記載すること。"""
+    default_context = """本データは製薬業界のGL（総勘定元帳）データであり、「国名」「サプライヤ名」「費目」「案件名」「摘要」から構成された構造化データである。"""
+    default_instruction = """- 各項目の意味を正確に逐語訳してください（省略・意訳・要約は不可）。
+- 不明な企業名がある場合は必要に応じてWeb検索を行い、注釈およびサプライヤ情報に記載してください。
+- サプライヤ情報には次の要素を含めてください：所在地、事業概要、売上高、競合企業、親会社やグループ関係など。
+- 注釈にすでにサプライヤ情報が含まれている場合、サプライヤ情報欄には「注釈に記載の通り」と記載してください。
+- 出力は「翻訳結果」「注釈」「サプライヤ情報」の3段構成ですべて日本語で記載すること。"""
 
     context = st.text_area("【前提】", value=default_context, height=150)
     instruction = st.text_area("【翻訳ルール】", value=default_instruction, height=250)
+    supplier_prompt = st.text_input("🔧 サプライヤ情報検索プロンプト補足（任意）", value="会社概要、所在地、売上高、競合、親会社")
 
 # === Web検索関数 ===
-def search_web(supplier, country_name):
+def search_web(supplier, country_name, prompt_hint):
     iso_code = normalize_country_code(country_name)
-    query = f"{supplier} の会社概要、事業内容、拠点情報"
+    query = f"{supplier} の{prompt_hint}"
     try:
         response = openai.chat.completions.create(
             model="gpt-4o-search-preview",
@@ -64,10 +71,10 @@ def search_web(supplier, country_name):
         return f"Web検索エラー: {e}"
 
 # === 翻訳関数 ===
-def call_openai_api(text, context, instruction, supplier_name, country_name, search_enabled=True):
+def call_openai_api(text, context, instruction, supplier_name, country_name, prompt_hint, search_enabled=True):
     prompt = f"""あなたは製薬業界のGLデータに関するプロ翻訳者です。
 
-この原文は「国名」「サプライヤ名」「費目」「案件名」「摘要」で構成された構造化データの1行です。
+この原文は「国名」「サプライヤ名」「費目」「案件名」「摘要」から構成された構造化データの1行です。
 
 【原文】
 {text}
@@ -87,7 +94,7 @@ def call_openai_api(text, context, instruction, supplier_name, country_name, sea
         response = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "あなたは丁寧な逐語翻訳を行う日本語専門のプロ翻訳者です。すべて日本語で出力してください。"},
+                {"role": "system", "content": "あなたは丁寧な逐語翻訳を行う日本語専門のプロ翻訳者です。出力はすべて日本語で行ってください。"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0
@@ -108,19 +115,22 @@ def call_openai_api(text, context, instruction, supplier_name, country_name, sea
                         break
 
         if search_enabled and ("不明" in note or "情報が見つかりません" in note or "補足情報なし" in note):
-            supplier_info = search_web(supplier_name, country_name)
+            supplier_info = search_web(supplier_name, country_name, prompt_hint)
+        else:
+            supplier_info = "注釈に記載の通り"
+
         return translation, note, supplier_info
     except Exception as e:
         return "エラー", f"APIエラー: {e}", ""
 
-# === サンプル翻訳 ===
+# === サンプル ===
 with left_col:
-    st.subheader("🔍 サンプル実行")
-    sample_text = st.text_input("例：日本 / GSK / 臨床試験費 / 肺がん研究 / 請求処理")
+    st.subheader("🔍 サンプル翻訳（1件テスト）")
+    sample_text = st.text_input("例：Japan / Merck / Clinical Trial / Lung Cancer Study / SAP invoice")
     if st.button("サンプル翻訳を実行"):
         with st.spinner("翻訳中..."):
-            tr, note, info = call_openai_api(sample_text, context, instruction, "GSK", "日本", search_enabled)
-            st.success("✅ 翻訳完了")
+            tr, note, info = call_openai_api(sample_text, context, instruction, "Merck", "Japan", supplier_prompt, search_enabled)
+            st.success("✅ 完了")
             st.markdown(f"**翻訳結果：** {tr}")
             st.markdown(f"**注釈：** {note}")
             st.markdown(f"**サプライヤ情報：** {info}")
@@ -133,18 +143,18 @@ if st.session_state.api_key and uploaded_file:
         df = pd.read_excel(uploaded_file)
         required_cols = ["国名", "サプライヤ名", "費目", "案件名", "摘要"]
         if not all(col in df.columns for col in required_cols):
-            st.error("⚠️ 必須列が不足：国名／サプライヤ名／費目／案件名／摘要")
+            st.error("⚠️ 入力ファイルに必要な列が揃っていません。")
             st.stop()
     except Exception as e:
         st.error(f"Excel読み込みエラー: {e}")
         st.stop()
 
     if len(df) > 100:
-        st.error("⚠️ Webバージョンは最大100件までに制限されています。")
+        st.error("⚠️ Web版では最大100件までに制限されています。")
         st.stop()
 
     if left_col.button("🚀 一括翻訳を開始"):
-        with st.spinner("翻訳中..."):
+        with st.spinner("処理中..."):
             results = {}
             progress = st.progress(0)
             status = st.empty()
@@ -163,6 +173,7 @@ if st.session_state.api_key and uploaded_file:
                         text, context, instruction,
                         supplier_name=row["サプライヤ名"],
                         country_name=row["国名"],
+                        prompt_hint=supplier_prompt,
                         search_enabled=search_enabled
                     )] = idx
 
@@ -176,12 +187,17 @@ if st.session_state.api_key and uploaded_file:
             output = io.BytesIO()
             df.to_excel(output, index=False)
             output.seek(0)
-            filename = f"翻訳結果_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+            filename = f"翻訳結果_{now_jst.replace(':','')}.xlsx"
 
-            st.success("✅ 翻訳完了！ダウンロード可能です。")
-            st.download_button(
-                label="📥 翻訳済みExcelをダウンロード",
-                data=output,
-                file_name=filename,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            st.success("✅ 翻訳完了！以下からダウンロード可能です。")
+            st.download_button("📥 翻訳済みExcelをダウンロード", data=output, file_name=filename)
+
+# === ISOコード案内リンク ===
+st.markdown("""
+---
+📌 **国コード（ISO 3166-1 alpha-2）について**  
+このアプリでは、Web検索の精度向上のため、国名を2文字のISOコード（JP, CN, USなど）に自動変換しています。  
+Excel上で「日本」「China」などの記載があっても問題ありません。
+
+🔗 [ISO国コード一覧（Wikipedia）](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)
+""")
