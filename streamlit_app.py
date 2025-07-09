@@ -187,7 +187,16 @@ with left_col:
     sample_text = st.text_input("例：Japan / Merck / Clinical Trial / Lung Cancer Study / SAP invoice")
     if st.button("サンプル翻訳を実行"):
         with st.spinner("翻訳中..."):
-            tr, note, info = call_openai_api(sample_text, context, instruction, "Merck", "Japan", supplier_prompt, web_search_mode)
+            tr, note, info = call_openai_api(
+                sample_text,
+                context,
+                instruction,
+                supplier_name="Merck",
+                country_name="Japan",
+                prompt_hint=supplier_prompt,
+                web_mode=web_search_mode,
+                target_company=target_company
+            )
             st.success("✅ 翻訳完了")
             st.markdown(f"**翻訳結果：** {tr}")
             st.markdown(f"**注釈：** {note}")
