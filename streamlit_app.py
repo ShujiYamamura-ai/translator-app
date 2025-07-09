@@ -195,41 +195,19 @@ def call_openai_api(text, context, instruction, supplier_name, country_name, pro
 with left_col:
     st.subheader("🔍 サンプル翻訳（構造化入力）")
 
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        st.markdown("🌍 **国名：**")
-    with col2:
-        sample_country = st.text_input(label="", value="US", key="sample_country")
+    def row(label, key, default):
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.markdown(label)
+        with col2:
+            return st.text_input(label="", value=default, key=key)
 
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        st.markdown("🏢 **サプライヤ名：**")
-    with col2:
-        sample_supplier = st.text_input(label="", value="JWALK, LLC", key="sample_supplier")
-
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        st.markdown("💼 **費目名：**")
-    with col2:
-        sample_category = st.text_input(label="", value="Consulting Fee", key="sample_category")
-
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        st.markdown("📁 **案件名：**")
-    with col2:
-        sample_project = st.text_input(label="", value="US Market Trend Research", key="sample_project")
-
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        st.markdown("📝 **摘要：**")
-    with col2:
-        sample_summary = st.text_input(label="", value="Local Consumer Behavior Analysis in NY", key="sample_summary")
-
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        st.markdown("🎯 **対象企業名：**")
-    with col2:
-        sample_target_company = st.text_input(label="", value="Shiseido", key="sample_target_company")
+    sample_country = row("🌍 国名：", "sample_country", "US")
+    sample_supplier = row("🏢 サプライヤ名：", "sample_supplier", "JWALK, LLC")
+    sample_category = row("💼 費目名：", "sample_category", "Consulting Fee")
+    sample_project = row("📁 案件名：", "sample_project", "US Market Trend Research")
+    sample_summary = row("📝 摘要：", "sample_summary", "Local Consumer Behavior Analysis in NY")
+    sample_target_company = row("🎯 対象企業名：", "sample_target_company", "Shiseido")
 
 
     if st.button("サンプル翻訳を実行"):
