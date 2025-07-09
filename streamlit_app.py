@@ -11,7 +11,7 @@ CODE_UPDATED_AT = "2025-07-09 23:40 JST"
 
 # === タイトル表示 ===
 st.set_page_config(page_title="GL翻訳支援", layout="wide")
-st.title(f"🌐 多言語GLデータ翻訳支援（Web版｜更新: 20250709 1440")
+st.title(f"🌐 多言語GLデータ翻訳支援（Web版｜更新: 20250709 1536")
 
 # === レイアウト設定 ===
 left_col, right_col = st.columns([1, 2])
@@ -63,7 +63,7 @@ with right_col:
     supplier_prompt = st.text_input("📘 サプライヤ情報に含めたい項目", value=default_supplier_prompt)
 
     # 翻訳プロンプト設定
-    default_context = """本データは製薬業界のGL（総勘定元帳）データであり、「国名」「サプライヤ名」「費目」「案件名」「摘要」から構成された構造化データである。"""
+    default_context = f"""本データは{target_industry or "各種業界"}における会計・経理関連のGL（総勘定元帳）データであり、「国名」「サプライヤ名」「費目」「案件名」「摘要」から構成された構造化データです。"""
     default_instruction = """- 各項目の意味を正確に逐語訳すること（省略・意訳・要約は不可）。
 - 不明な企業名がある場合は必要に応じてWeb検索を行い、注釈およびサプライヤ情報に記載すること。
 - サプライヤ情報には次を含める：所在地、事業概要、売上高、競合企業、親会社やグループ関係。
@@ -93,9 +93,10 @@ def should_execute_web_search(note, mode):
     return False
 
 # === Web検索関数 ===
-def search_web(supplier, country_name, prompt_hint):
+def search_web(supplier, country_name, prompt_hint, target_company):
     iso_code = normalize_country_code(country_name)
-    query = f"{supplier} の{prompt_hint}"
+    query = build_supplier_search_query(supplier, target_company, prompt_hint)
+    
     try:
         response = openai.chat.completions.create(
             model="gpt-4o-search-preview",
@@ -112,9 +113,24 @@ def search_web(supplier, country_name, prompt_hint):
     except Exception as e:
         return f"Web検索エラー: {e}"
 
+ 
+ # === 検索クエリ生成関数 ===   
+def build_supplier_search_query(supplier_name, target_company, prompt_hint):
+    return f"""
+次の目的でWeb検索を行ってください：
+
+1. {supplier_name} と {target_company} の企業間関係（親会社／グループ会社など）があるかを確認してください。
+2. 関係がある場合は、その関係性を説明したうえで {supplier_name} の以下の情報を中心に調査してください。
+3. 関係がない場合は、{target_company} については触れず、{supplier_name} のみに集中して調査を行ってください。
+
+調査対象項目：{prompt_hint}
+
+※ 対象企業に関する記述は最大2文以内とし、関係がない場合は一切記載しないでください。
+"""
+
 # === 翻訳関数 ===
-def call_openai_api(text, context, instruction, supplier_name, country_name, prompt_hint, web_mode):
-    prompt = f"""あなたは製薬業界のGLデータに関するプロ翻訳者です。
+def call_openai_api(text, context, instruction, supplier_name, country_name, prompt_hint, web_mode, target_company):
+    prompt = f"""あなたはGLデータ（総勘定元帳）データに関するプロ翻訳者です。
 
 この原文は「国名」「サプライヤ名」「費目」「案件名」「摘要」から構成された構造化データの1行です。
 
@@ -157,7 +173,7 @@ def call_openai_api(text, context, instruction, supplier_name, country_name, pro
                         break
 
         if should_execute_web_search(note, web_mode):
-            supplier_info = search_web(supplier_name, country_name, prompt_hint)
+            supplier_info = search_web(supplier_name, country_name, prompt_hint, target_company)
         else:
             supplier_info = "注釈に記載の通り"
 
@@ -216,8 +232,10 @@ if st.session_state.api_key and uploaded_file:
                         supplier_name=row["サプライヤ名"],
                         country_name=row["国名"],
                         prompt_hint=supplier_prompt,
-                        web_mode=web_search_mode
+                        web_mode=web_search_mode,
+                        target_company=target_company
                     )] = idx
+
 
                 for i, future in enumerate(as_completed(futures)):
                     idx = futures[future]
