@@ -195,20 +195,12 @@ def call_openai_api(text, context, instruction, supplier_name, country_name, pro
 with left_col:
     st.subheader("🔍 サンプル翻訳（構造化入力）")
 
-    def row(label, key, default):
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            st.markdown(label)
-        with col2:
-            return st.text_input(label="", value=default, key=key)
-
-    sample_country = row("🌍 国名：", "sample_country", "US")
-    sample_supplier = row("🏢 サプライヤ名：", "sample_supplier", "JWALK, LLC")
-    sample_category = row("💼 費目名：", "sample_category", "Consulting Fee")
-    sample_project = row("📁 案件名：", "sample_project", "US Market Trend Research")
-    sample_summary = row("📝 摘要：", "sample_summary", "Local Consumer Behavior Analysis in NY")
-    sample_target_company = row("🎯 対象企業名：", "sample_target_company", "Shiseido")
-
+    sample_country = st.text_input("🌍 国名：", value="US")
+    sample_supplier = st.text_input("🏢 サプライヤ名：", value="JWALK, LLC")
+    sample_category = st.text_input("💼 費目名：", value="Consulting Fee")
+    sample_project = st.text_input("📁 案件名：", value="US Market Trend Research")
+    sample_summary = st.text_input("📝 摘要：", value="Local Consumer Behavior Analysis in NY")
+    sample_target_company = st.text_input("🎯 対象企業名：", value="Shiseido")
 
     if st.button("サンプル翻訳を実行"):
         sample_text = f"{sample_country} / {sample_supplier} / {sample_category} / {sample_project} / {sample_summary}"
@@ -227,6 +219,7 @@ with left_col:
             st.markdown(f"**翻訳結果：** {tr}")
             st.markdown(f"**注釈：** {note}")
             st.markdown(f"**サプライヤ情報：** {info}")
+
 
 
 # === 一括処理 ===
