@@ -4,6 +4,8 @@ import openai
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import io
+import os
+
 
 # === JST時刻（更新日時表示用）===
 JST = timezone(timedelta(hours=9))
@@ -11,11 +13,18 @@ now_jst = datetime.now(JST).strftime('%Y-%m-%d %H:%M')
 
 # === ISO国コードファイルの読み込み ===
 @st.cache_data
-def load_country_iso_map(path):
-    df = pd.read_csv(path)
-    return {str(k).strip(): str(v).strip() for k, v in zip(df["国名"], df["ISOコード"])}
 
-iso_map = load_country_iso_map("/mnt/data/iso_country_codes.csv")
+# 相対パスでcsv読み込み
+ISO_XLSX_PATH = os.path.join("data", "iso_country_codes.xlsx")
+
+def load_country_iso_map(path):
+    try:
+        df = pd.read_excel(path)
+        return {str(k).strip(): str(v).strip() for k, v in zip(df["国名"], df["ISOコード"])}
+    except Exception as e:
+        st.error(f"ISOコードファイルの読み込みに失敗しました: {e}")
+        st.stop()
+iso_map = load_country_iso_map(ISO_XLSX_PATH)
 
 def normalize_country_code(name):
     if isinstance(name, str):
