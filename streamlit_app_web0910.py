@@ -67,9 +67,9 @@ with left_col:
     sample_bytes = load_sample_file_bytes(SAMPLE_XLSX_PATH)
     if sample_bytes:
         st.download_button(
-            "📥 sample_input(資生堂のGL）.xlsx をダウンロード",
+            "📥 sample_input_shiseido_gl.xlsx をダウンロード",
             data=sample_bytes,
-            file_name="sample_input(資生堂のGL）.xlsx",
+            file_name="sample_input_shiseido_gl.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         st.caption("※ サンプル実行用です。まずはこのファイルをアップロードして動作確認してください。")
