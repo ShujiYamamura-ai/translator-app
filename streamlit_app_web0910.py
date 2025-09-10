@@ -19,7 +19,7 @@ left_col, right_col = st.columns([1, 2])
 
 # === ISO国コード読み込み ===
 ISO_XLSX_PATH = os.path.join("data", "iso_country_codes.xlsx")
-SAMPLE_XLSX_PATH = os.path.join("data", "sample_input(資生堂のGL）.xlsx")  # 配布用
+SAMPLE_XLSX_PATH = os.path.join("data", "sample_input_shiseido_gl.xlsx")  # 配布用
 
 @st.cache_data
 def load_country_iso_map(path):
