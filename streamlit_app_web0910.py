@@ -12,7 +12,7 @@ CODE_UPDATED_AT = "2025-09-10 23:40 JST"
 
 # === タイトル表示 ===
 st.set_page_config(page_title="GL翻訳支援", layout="wide")
-st.title(f"🌐 多言語GLデータ翻訳支援（Web版｜更新: {CODE_UPDATED_AT})")
+st.title(f"🌐 多言語GLデータ翻訳支援（Web版｜更新:09102154)")
 
 # === レイアウト設定 ===
 left_col, right_col = st.columns([1, 2])
